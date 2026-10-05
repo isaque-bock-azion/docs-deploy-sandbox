@@ -1,0 +1,2 @@
+# Azion CLI version used by every deploy workflow. Sourced with `source .cli-version`.
+CLI_VERSION=4.23.0
