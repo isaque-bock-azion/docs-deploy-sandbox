@@ -1,15 +1,15 @@
 {
   "name": "docs-prod-test",
-  "bucket": "",
+  "bucket": "docs-prod-test",
   "preset": "astro",
   "env": "production",
-  "prefix": "",
+  "prefix": "20261005214125",
   "rotate-prefix": false,
-  "not-first-run": false,
+  "not-first-run": true,
   "function": null,
   "application": {
-    "id": 0,
-    "name": "__DEFAULT__"
+    "id": 1791232173,
+    "name": "docs-prod-test"
   },
   "domain": {
     "id": 0,
@@ -23,15 +23,46 @@
   "origin": null,
   "rules-engine": {
     "created": false,
-    "rules": null
+    "rules": [
+      {
+        "id": 745159,
+        "name": "Deliver Static Assets and Set Cache Policy",
+        "phase": "request"
+      },
+      {
+        "id": 745160,
+        "name": "Redirect to index.html",
+        "phase": "request"
+      },
+      {
+        "id": 745161,
+        "name": "Redirect to index.html for Subpaths",
+        "phase": "request"
+      }
+    ]
   },
-  "cache-settings": null,
+  "cache-settings": [
+    {
+      "id": 357161,
+      "name": "docs-prod-test"
+    }
+  ],
   "workloads": {
-    "id": 0,
-    "name": "",
-    "domains": null,
-    "url": "",
-    "deployment_id": null
+    "id": 1791232789,
+    "name": "docs-prod-test",
+    "domains": [],
+    "url": "https://uhag5egto7e.map.azionedge.net",
+    "deployment_id": [
+      {
+        "id": 338686,
+        "name": "docs-prod-test"
+      }
+    ]
   },
-  "connectors": null
+  "connectors": [
+    {
+      "id": 154022,
+      "name": "docs-prod-test"
+    }
+  ]
 }
