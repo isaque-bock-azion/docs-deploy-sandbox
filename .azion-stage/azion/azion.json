@@ -1,15 +1,15 @@
 {
   "name": "docs-stage-test",
-  "bucket": "",
+  "bucket": "docs-stage-test",
   "preset": "astro",
   "env": "production",
-  "prefix": "",
+  "prefix": "20261005205428",
   "rotate-prefix": false,
-  "not-first-run": false,
+  "not-first-run": true,
   "function": null,
   "application": {
-    "id": 0,
-    "name": "__DEFAULT__"
+    "id": 1791232172,
+    "name": "docs-stage-test"
   },
   "domain": {
     "id": 0,
@@ -23,15 +23,46 @@
   "origin": null,
   "rules-engine": {
     "created": false,
-    "rules": null
+    "rules": [
+      {
+        "id": 745155,
+        "name": "Deliver Static Assets and Set Cache Policy",
+        "phase": "request"
+      },
+      {
+        "id": 745156,
+        "name": "Redirect to index.html",
+        "phase": "request"
+      },
+      {
+        "id": 745157,
+        "name": "Redirect to index.html for Subpaths",
+        "phase": "request"
+      }
+    ]
   },
-  "cache-settings": null,
+  "cache-settings": [
+    {
+      "id": 357160,
+      "name": "docs-stage-test"
+    }
+  ],
   "workloads": {
-    "id": 0,
-    "name": "",
-    "domains": null,
-    "url": "",
-    "deployment_id": null
+    "id": 1791232787,
+    "name": "docs-stage-test",
+    "domains": [],
+    "url": "https://4lkv6e0zow8.map.azionedge.net",
+    "deployment_id": [
+      {
+        "id": 338684,
+        "name": "docs-stage-test"
+      }
+    ]
   },
-  "connectors": null
+  "connectors": [
+    {
+      "id": 154020,
+      "name": "docs-stage-test"
+    }
+  ]
 }
