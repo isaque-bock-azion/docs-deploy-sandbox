@@ -50,7 +50,8 @@ jobs:
   production:
     name: Deploy production
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    # !cancelled(): a skipped stage would otherwise propagate and skip production too.
+    if: ${{ !cancelled() && needs.release-please.result == 'success' && needs.release-please.outputs.release_created == 'true' }}
     permissions:
       contents: write
     uses: ./.github/workflows/deploy-production.yml
