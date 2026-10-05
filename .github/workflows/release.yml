@@ -1,0 +1,59 @@
+name: Release
+
+# push to main -> deploy stage -> release-please -> deploy production when a release is cut.
+# Merging the release PR skips stage: it only carries the version bump and the changelog.
+
+on:
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+concurrency:
+  group: release-pipeline
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    name: Deploy stage
+    if: "${{ !startsWith(github.event.head_commit.message, 'chore(release): v') }}"
+    permissions:
+      contents: write
+    uses: ./.github/workflows/deploy-stage.yml
+    with:
+      ref: ${{ github.sha }}
+    secrets: inherit
+
+  release-please:
+    name: Release PR and tags
+    needs: stage
+    if: ${{ always() && (needs.stage.result == 'success' || needs.stage.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          target-branch: main
+
+  production:
+    name: Deploy production
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/deploy-production.yml
+    with:
+      release_tag: ${{ needs.release-please.outputs.tag_name }}
+    secrets: inherit

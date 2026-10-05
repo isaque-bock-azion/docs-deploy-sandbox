@@ -1,0 +1,159 @@
+name: Deploy stage
+
+# Builds the docs and deploys them to Azion stage with the CLI, then commits the CLI state
+# (.azion-stage) back to main. Called by release.yml; can also be dispatched by hand.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref (branch, tag or SHA) to build and deploy
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref (branch, tag or SHA) to build and deploy
+        required: true
+        default: main
+        type: string
+
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy to stage
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    environment:
+      name: stage
+      url: ${{ steps.result.outputs.url }}
+    concurrency:
+      group: deploy-azion-stage
+      cancel-in-progress: false
+    env:
+      HUSKY: 0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Use the latest Azion state from main
+        run: |
+          set -euo pipefail
+          # The checked-out ref can predate the last state commit; deploying with stale IDs would duplicate resources.
+          git fetch --no-tags origin main
+          git checkout origin/main -- .azion-stage
+
+      - uses: ./.github/actions/setup
+
+      - name: Install Azion CLI
+        run: |
+          set -euo pipefail
+          source .cli-version
+          : "${CLI_VERSION:?.cli-version must define CLI_VERSION}"
+          echo "Using Azion CLI ${CLI_VERSION}"
+
+          CLI_PKG="azion_${CLI_VERSION}_linux_amd64.deb"
+          BASE_URL="https://github.com/aziontech/azion/releases/download/${CLI_VERSION}"
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o "$CLI_PKG" "${BASE_URL}/${CLI_PKG}"
+          curl -fsSL -o azion_checksum.txt "${BASE_URL}/azion_v${CLI_VERSION}_checksum"
+
+          CHECKSUM_LINE="$(awk -v pkg="$CLI_PKG" '$2 == pkg' azion_checksum.txt)"
+          if [ -z "$CHECKSUM_LINE" ]; then
+            echo "::error::No checksum entry for ${CLI_PKG} in azion_v${CLI_VERSION}_checksum"
+            exit 1
+          fi
+          echo "$CHECKSUM_LINE" | sha256sum -c -
+
+          sudo dpkg -i "$CLI_PKG"
+          rm -f "$CLI_PKG" azion_checksum.txt
+          azion version
+
+      - name: Configure Azion CLI
+        env:
+          DEPLOY_TOKEN: ${{ secrets.AZION_DEPLOY_TOKEN }}
+        run: azion -t "$DEPLOY_TOKEN"
+
+      - name: Verify Azion authentication
+        run: |
+          set -euo pipefail
+          if ! azion whoami >/dev/null 2>&1; then
+            echo "::error::azion whoami failed: AZION_DEPLOY_TOKEN is missing or invalid in the stage environment"
+            exit 1
+          fi
+          echo "Azion CLI authenticated"
+
+      - name: Build and deploy
+        id: deploy
+        env:
+          NODE_OPTIONS: --max-old-space-size=8120
+        run: bash .azion-stage/deploy-stage.sh
+
+      - name: Commit the Azion state back to main
+        if: ${{ always() && steps.deploy.outcome != 'skipped' }}
+        run: |
+          set -euo pipefail
+          STATE_DIR=.azion-stage
+          SNAPSHOT="$RUNNER_TEMP/azion-state"
+          rm -rf "$SNAPSHOT"
+          cp -R "$STATE_DIR" "$SNAPSHOT"
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Commit on top of the latest main so the state never conflicts; retry if main moves meanwhile.
+          for attempt in 1 2 3; do
+            git fetch --no-tags origin main
+            git reset --hard --quiet
+            git switch --quiet --force-create deploy-state origin/main
+            rm -rf "$STATE_DIR"
+            cp -R "$SNAPSHOT" "$STATE_DIR"
+            git add -A -- "$STATE_DIR"
+            if git diff --cached --quiet; then
+              echo "No Azion state change to record"
+              exit 0
+            fi
+            git commit --quiet -m "chore(deploy): record stage azion state (${SHORT_SHA})"
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Push rejected (attempt ${attempt}); retrying on the new main"
+          done
+          echo "::error::Could not push the Azion state to main after 3 attempts"
+          exit 1
+
+      - name: Summarize deployment
+        id: result
+        if: ${{ always() }}
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          DEPLOY_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          URL=""
+          STATE_FILE=.azion-stage/azion/azion.json
+          if [ -f "$STATE_FILE" ]; then
+            URL="$(jq -r '.workloads.url // empty' "$STATE_FILE" 2>/dev/null || true)"
+          fi
+          case "$URL" in
+            '' | http://* | https://*) ;;
+            *) URL="https://${URL}" ;;
+          esac
+          echo "url=${URL}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Stage deployment"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Environment | stage |"
+            echo "| Ref | \`${DEPLOY_REF}\` |"
+            echo "| URL | ${URL:-_not recorded_} |"
+            echo "| Deploy | ${DEPLOY_OUTCOME} |"
+          } >> "$GITHUB_STEP_SUMMARY"
